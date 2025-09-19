@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MCQ Test</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  .timer { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+  #quiz { margin-bottom: 20px; }
+  .correct { color: green; font-weight: bold; }
+  .wrong { color: red; font-weight: bold; }
+  .unanswered { color: orange; font-style: italic; }
+  .answer-block { margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+  button { margin-right: 8px; padding: 8px 12px; }
+  .controls { margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>MCQ Test</h1>
+<div class="timer">Time Left: <span id="time">20:00</span></div>
+<div id="quiz"></div>
+
+<div class="controls">
+  <button id="prev">Previous</button>
+  <button id="next">Next</button>
+  <button id="submitNow">Submit Now</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+/* ---------- Helpers ---------- */
+function normalize(s){ return String(s||'').trim().toLowerCase(); }
+function escapeHtml(s){ return String(s||'').replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+function shuffleArray(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+/* ---------- Globals ---------- */
+let allQuestions=[], quizData=[], currentQuestion=0, userAnswers={}, timer=null, timeLeft=0;
+
+/* ---------- Timer ---------- */
+function startTimer(){
+  clearInterval(timer);
+  timeLeft = 20*60;
+  updateTimer();
+  timer = setInterval(()=>{
+    timeLeft--;
+    updateTimer();
+    if(timeLeft <= 0) submitQuiz();
+  }, 1000);
+}
+function updateTimer(){
+  const m=Math.floor(timeLeft/60);
+  const s=timeLeft%60;
+  document.getElementById('time').textContent = `${m}:${s<10?'0':''}${s}`;
+}
+
+/* ---------- Quiz Setup ---------- */
+function prepareQuiz(){
+  userAnswers={};
+  currentQuestion=0;
+  quizData = shuffleArray(allQuestions).slice(0,40).map(q=>({
+    question: q.question,
+    options: shuffleArray(q.options.slice()), // shuffled copy
+    answerText: q.answerText
+  }));
+}
+
+/* ---------- Load Question ---------- */
+function loadQuestion(){
+  if(currentQuestion >= quizData.length){ submitQuiz(); return; }
+  const q = quizData[currentQuestion];
+  let html = `<h2>Question ${currentQuestion+1} of ${quizData.length}</h2>`;
+  html += `<p>${escapeHtml(q.question)}</p><div class="options">`;
+  q.options.forEach((opt,i)=>{
+    const checked = userAnswers[currentQuestion] && normalize(userAnswers[currentQuestion])===normalize(opt) ? 'checked' : '';
+    html += `<label><input type="radio" name="answer" value="${i}" ${checked}> ${escapeHtml(opt)}</label><br>`;
+  });
+  html += '</div>';
+  document.getElementById('quiz').innerHTML = html;
+  document.getElementById('prev').style.display = currentQuestion===0?'none':'inline-block';
+}
+
+/* ---------- Save Answer ---------- */
+function saveAnswer(){
+  const selected = document.querySelector('input[name="answer"]:checked');
+  if(selected){
+    const idx = parseInt(selected.value,10);
+    userAnswers[currentQuestion] = quizData[currentQuestion].options[idx];
+  }
+}
+
+/* ---------- Navigation ---------- */
+document.getElementById('next').addEventListener('click',()=>{
+  saveAnswer();
+  if(!userAnswers[currentQuestion]){ alert('Please select an answer!'); return; }
+  currentQuestion++;
+  loadQuestion();
+});
+document.getElementById('prev').addEventListener('click',()=>{
+  saveAnswer();
+  if(currentQuestion>0) currentQuestion--;
+  loadQuestion();
+});
+document.getElementById('submitNow').addEventListener('click',()=>{
+  saveAnswer();
+  submitQuiz();
+});
+
+/* ---------- Submit Quiz ---------- */
+function submitQuiz(){
+  clearInterval(timer);
+  let score=0;
+  for(let i=0;i<quizData.length;i++){
+    if(userAnswers[i] && normalize(userAnswers[i])===normalize(quizData[i].answerText)) score++;
+  }
+
+  document.getElementById('quiz').innerHTML='';
+  document.getElementById('prev').style.display='none';
+  document.getElementById('next').style.display='none';
+  document.getElementById('submitNow').style.display='none';
+
+  const resultDiv = document.getElementById('result');
+  resultDiv.innerHTML = `<h2>Quiz Over!</h2>
+                         <p>Your score: ${score} / ${quizData.length}</p>
+                         <button id="review">Review Answers</button>
+                         <button id="restart">Restart Quiz</button>`;
+
+  document.getElementById('review').addEventListener('click', showReview);
+  document.getElementById('restart').addEventListener('click', restartQuiz);
+}
+
+/* ---------- Review ---------- */
+function showReview(){
+  let html='<h2>Review</h2>';
+  quizData.forEach((q,idx)=>{
+    const userAns = userAnswers[idx];
+    const correct = q.answerText;
+    html += `<div class="answer-block"><p><b>Q${idx+1}:</b> ${escapeHtml(q.question)}</p>`;
+    if(!userAns) html+='<p class="unanswered">⚠ Unanswered</p>';
+    q.options.forEach(opt=>{
+      const nOpt = normalize(opt);
+      const nUser = userAns?normalize(userAns):null;
+      const nCorrect = normalize(correct);
+      if(nOpt===nCorrect && nUser===nCorrect) html+=`<p class="correct">✔ ${escapeHtml(opt)} (Your Answer)</p>`;
+      else if(nOpt===nUser && nUser!==nCorrect) html+=`<p class="wrong">✘ ${escapeHtml(opt)} (Your Answer)</p>`;
+      else if(nOpt===nCorrect) html+=`<p class="correct">✔ ${escapeHtml(opt)} (Correct Answer)</p>`;
+      else html+=`<p>${escapeHtml(opt)}</p>`;
+    });
+    html+='</div>';
+  });
+  html+='<button id="restart2">Restart Quiz</button>';
+  document.getElementById('quiz').innerHTML='';
+  document.getElementById('result').innerHTML=html;
+  document.getElementById('restart2').addEventListener('click', restartQuiz);
+}
+
+/* ---------- Restart ---------- */
+function restartQuiz(){
+  prepareQuiz();
+  startTimer();
+  loadQuestion();
+  document.getElementById('result').innerHTML='';
+  document.getElementById('prev').style.display='inline-block';
+  document.getElementById('next').style.display='inline-block';
+  document.getElementById('submitNow').style.display='inline-block';
+}
+
+/* ---------- Load JSON ---------- */
+fetch('questions.json')
+.then(r=>r.json())
+.then(data=>{
+  allQuestions = data.map(q=>{
+    return {
+      question: q.question || "No Question",
+      options: [q.option1,q.option2,q.option3,q.option4].filter(Boolean),
+      answerText: q.option1
+    };
+  });
+  if(!allQuestions.length){
+    document.getElementById('quiz').innerHTML='<p style="color:red">No valid questions found in questions.json.</p>';
+    return;
+  }
+  prepareQuiz();
+  startTimer();
+  loadQuestion();
+})
+.catch(err=>{
+  document.getElementById('quiz').innerHTML='<p style="color:red">Failed to load questions.json — check console.</p>';
+  console.error(err);
+});
+</script>
+</body>
+</html>
